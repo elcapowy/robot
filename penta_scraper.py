@@ -35,8 +35,8 @@ from notion_client import get_marcas_competidoras
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-PENTA_LOGIN_URL = "https://www.penta-transaction.com/login"  # AJUSTAR: URL real de login
-PENTA_BUSCADOR_URL = "https://www.penta-transaction.com/search"  # AJUSTAR: URL real del buscador
+PENTA_LOGIN_URL = "https://app.penta-transaction.com/login/es"
+PENTA_BUSCADOR_URL = "https://app.penta-transaction.com/home/formulario/AR/importDetalladas"
 
 DOWNLOAD_DIR = Path("downloads")
 DEFAULT_TIMEOUT_MS = 30_000
@@ -55,15 +55,15 @@ def login(page) -> None:
     page.goto(PENTA_LOGIN_URL, wait_until="domcontentloaded")
 
     # AJUSTAR SELECTOR: campo de usuario
-    page.fill("#username", penta_user)
+    page.fill("#inputUsuario", penta_user)
     # AJUSTAR SELECTOR: campo de contraseña
-    page.fill("#password", penta_pass)
-    # AJUSTAR SELECTOR: botón de login
-    page.click("button[type='submit']")
+    page.fill("#inputPassword", penta_pass)
+    # AJUSTAR SELECTOR: botón de login (componente <ion-button type="submit"> con texto "Ingresar")
+    page.click("ion-button:has-text('Ingresar')")
 
-    # Esperar a que la sesión quede establecida (ej. aparición de un elemento
-    # del dashboard post-login). AJUSTAR SELECTOR según la app real.
-    page.wait_for_selector("text=Buscador", timeout=DEFAULT_TIMEOUT_MS)
+    # Esperar a que la sesión quede establecida: la URL deja de contener
+    # "/login" una vez que el login es exitoso.
+    page.wait_for_url(lambda url: "/login" not in url, timeout=DEFAULT_TIMEOUT_MS)
     logger.info("Login exitoso.")
 
 
@@ -75,36 +75,51 @@ def buscar_y_exportar_marca(page, marca: str) -> Path | None:
     logger.info("Procesando marca: %s", marca)
     page.goto(PENTA_BUSCADOR_URL, wait_until="domcontentloaded")
 
-    # AJUSTAR SELECTOR: input de "Marca/Fabricante" del buscador Penta.
-    # Ejemplos típicos según la plataforma:
-    #   page.fill("input[name='marca_fabricante']", marca)
-    #   page.fill("#txtMarca", marca)
-    campo_marca_selector = "input[name='marca_fabricante']"
+    # AJUSTAR SELECTOR: el campo "Marca" es un buscador tipo Ionic (ion-searchbar)
+    # que abre una lista filtrada de opciones al escribir. El "name" con índice
+    # numérico (ion-searchbar-2) puede variar si cambia el orden de los campos
+    # en el formulario; si falla, volver a inspeccionar y ajustar.
+    campo_marca_selector = "input.searchbar-input[placeholder='Buscar']"
     page.wait_for_selector(campo_marca_selector, timeout=DEFAULT_TIMEOUT_MS)
-    page.fill(campo_marca_selector, "")
+    page.click(campo_marca_selector)
     page.fill(campo_marca_selector, marca)
 
-    # AJUSTAR SELECTOR: botón "Buscar"
-    boton_buscar_selector = "button#btnBuscar"
+    # Esperar a que aparezca la lista filtrada y clickear la opción que
+    # coincide exactamente con la marca buscada.
+    # AJUSTAR SELECTOR: ajustar el contenedor de la lista de opciones si el
+    # texto no matchea (mayúsculas/acentos) o si el ítem no es clickeable
+    # directo (a veces hay un checkbox al lado del texto).
+    try:
+        opcion_selector = f"text='{marca}'"
+        page.wait_for_selector(opcion_selector, timeout=DEFAULT_TIMEOUT_MS)
+        page.click(opcion_selector)
+    except PWTimeoutError:
+        logger.warning("No apareció la opción '%s' en el listado de marcas. Se omite.", marca)
+        return None
+
+    # AJUSTAR SELECTOR: botón "Buscar" (botón azul con ícono de lupa)
+    boton_buscar_selector = "ion-button:has-text('Buscar'), button:has-text('Buscar')"
     page.click(boton_buscar_selector)
 
-    # Esperar la carga de la tabla de resultados.
-    # AJUSTAR SELECTOR: contenedor/tabla de resultados de búsqueda.
-    tabla_resultados_selector = "table#resultados-busqueda"
+    # Esperar la carga de la tabla de resultados (headers "Fecha"/"País de Origen").
+    # AJUSTAR SELECTOR: si la grilla usa virtual-scroll y tarda en pintar filas,
+    # puede hacer falta esperar también un ícono/spinner de carga a que desaparezca.
+    tabla_resultados_selector = "text='País de Origen'"
     try:
         page.wait_for_selector(tabla_resultados_selector, timeout=DEFAULT_TIMEOUT_MS)
     except PWTimeoutError:
         logger.warning("Sin resultados (o timeout) para marca '%s'. Se omite.", marca)
         return None
 
-    # Si la tabla existe pero está vacía, evitar exportar un archivo inútil.
-    filas = page.query_selector_all(f"{tabla_resultados_selector} tbody tr")
+    # Si no hay filas de datos (solo el header), evitar exportar un archivo vacío.
+    filas = page.query_selector_all("text=/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}$/")
     if not filas:
         logger.warning("Tabla de resultados vacía para marca '%s'. Se omite.", marca)
         return None
 
-    # AJUSTAR SELECTOR: botón "Exportar a Excel"
-    boton_exportar_selector = "button#btnExportarExcel"
+    # AJUSTAR SELECTOR: botón "Exportar a Excel" — ícono con alt="Descargar Excel"
+    # dentro de la sección "Descargas" del panel lateral izquierdo.
+    boton_exportar_selector = "img[alt='Descargar Excel']"
 
     nombre_archivo = f"datos_{_sanitizar_nombre(marca)}.xlsx"
     destino = DOWNLOAD_DIR / nombre_archivo

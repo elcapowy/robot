@@ -56,8 +56,9 @@ def login(page) -> None:
 
     # AJUSTAR SELECTOR: campo de usuario
     page.fill("#inputUsuario", penta_user)
-    # AJUSTAR SELECTOR: campo de contraseña
-    page.fill("#inputPassword", penta_pass)
+    # AJUSTAR SELECTOR: campo de contraseña — <p-password id="inputPassword"> es un
+    # wrapper de PrimeNG; el <input type="password"> real está anidado adentro.
+    page.fill("p-password#inputPassword input", penta_pass)
     # AJUSTAR SELECTOR: botón de login (componente <ion-button type="submit"> con texto "Ingresar")
     page.click("ion-button:has-text('Ingresar')")
 

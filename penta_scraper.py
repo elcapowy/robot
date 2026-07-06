@@ -52,15 +52,24 @@ def login(page) -> None:
     penta_pass = os.environ["PENTA_PASS"]
 
     logger.info("Iniciando sesión en Penta-Transaction...")
-    page.goto(PENTA_LOGIN_URL, wait_until="domcontentloaded")
+    page.goto(PENTA_LOGIN_URL, wait_until="networkidle")
 
-    # AJUSTAR SELECTOR: campo de usuario
-    page.fill("#inputUsuario", penta_user)
-    # AJUSTAR SELECTOR: campo de contraseña — <p-password id="inputPassword"> es un
-    # wrapper de PrimeNG; el <input type="password"> real está anidado adentro.
-    page.fill("p-password#inputPassword input", penta_pass)
-    # AJUSTAR SELECTOR: botón de login (componente <ion-button type="submit"> con texto "Ingresar")
-    page.click("ion-button:has-text('Ingresar')")
+    try:
+        # AJUSTAR SELECTOR: campo de usuario
+        page.wait_for_selector("#inputUsuario", timeout=DEFAULT_TIMEOUT_MS, state="visible")
+        page.fill("#inputUsuario", penta_user)
+        # AJUSTAR SELECTOR: campo de contraseña — <p-password id="inputPassword"> es un
+        # wrapper de PrimeNG; el <input type="password"> real está anidado adentro.
+        page.fill("p-password#inputPassword input", penta_pass)
+        # AJUSTAR SELECTOR: botón de login (componente <ion-button type="submit"> con texto "Ingresar")
+        page.click("ion-button:has-text('Ingresar')")
+    except PWTimeoutError:
+        # Captura de pantalla de debug: ayuda a diagnosticar si Penta bloqueó
+        # el request (bot-protection), mostró un captcha, o cambió el DOM.
+        Path("debug").mkdir(exist_ok=True)
+        page.screenshot(path="debug/login_timeout.png", full_page=True)
+        logger.error("Timeout esperando el formulario de login. Screenshot guardado en debug/login_timeout.png")
+        raise
 
     # Esperar a que la sesión quede establecida: la URL deja de contener
     # "/login" una vez que el login es exitoso.

@@ -89,8 +89,21 @@ def buscar_y_exportar_marca(page, marca: str) -> Path | None:
     # que abre una lista filtrada de opciones al escribir. El "name" con índice
     # numérico (ion-searchbar-2) puede variar si cambia el orden de los campos
     # en el formulario; si falla, volver a inspeccionar y ajustar.
+    # El campo "Marca" es un dropdown que hay que abrir con un clic antes de
+    # que aparezca el buscador Ionic (input.searchbar-input) donde se escribe
+    # el texto a filtrar. AJUSTAR SELECTOR si el label no es "Marca" exacto.
+    page.get_by_text("Marca", exact=True).click()
+
     campo_marca_selector = "input.searchbar-input[placeholder='Buscar']"
-    page.wait_for_selector(campo_marca_selector, timeout=DEFAULT_TIMEOUT_MS)
+    try:
+        page.wait_for_selector(campo_marca_selector, timeout=DEFAULT_TIMEOUT_MS)
+    except PWTimeoutError:
+        Path("debug").mkdir(exist_ok=True)
+        page.screenshot(path=f"debug/marca_{_sanitizar_nombre(marca)}_buscador.png", full_page=True)
+        logger.error(
+            "No apareció el buscador de Marca para '%s'. Screenshot guardado en debug/.", marca
+        )
+        raise
     page.click(campo_marca_selector)
     page.fill(campo_marca_selector, marca)
 

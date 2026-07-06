@@ -44,7 +44,7 @@ def main() -> int:
     try:
         enviado = whatsapp_client.enviar_resumen_whatsapp(resumen)
         if not enviado:
-            logger.error("El envío de WhatsApp no se confirmó correctamente.")
+            logger.info("Envío de WhatsApp omitido (deshabilitado o sin credenciales configuradas).")
     except Exception:
         logger.exception("Falló el Módulo 4 (WhatsApp). El reporte ya quedó generado.")
         return 1

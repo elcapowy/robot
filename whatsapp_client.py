@@ -83,9 +83,16 @@ def enviar_resumen_whatsapp(resumen: dict) -> bool:
     gateway específico (Twilio, Meta Cloud API, CallMeBot, etc.) espera un
     esquema distinto, ajustar únicamente esta función.
     """
-    wa_api_url = os.environ["WA_API_URL"]
-    wa_token = os.environ["WA_TOKEN"]
-    wa_celular = os.environ["WA_CELULAR"]
+    wa_api_url = os.environ.get("WA_API_URL")
+    wa_token = os.environ.get("WA_TOKEN")
+    wa_celular = os.environ.get("WA_CELULAR")
+
+    if not (wa_api_url and wa_token and wa_celular):
+        logger.info(
+            "WA_API_URL / WA_TOKEN / WA_CELULAR no configurados. "
+            "Se omite el envío de WhatsApp (el reporte ya quedó generado)."
+        )
+        return False
 
     mensaje = construir_mensaje(resumen)
 
